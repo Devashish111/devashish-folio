@@ -38,15 +38,52 @@ export function Contact() {
     e.preventDefault();
     setPending(true);
 
-    // Simulate network delay
-    await new Promise((r) => setTimeout(r, 800));
+    const formData = new FormData(e.currentTarget);
+    const body = {
+      name: formData.get("name"),
+      email: formData.get("email"),
+      message: formData.get("message"),
+    };
+
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
+
+        const res = await fetch("https://pfolio-backend.onrender.com/message/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to send message.");
+        }
+
+        toast.success("Message sent!", {
+          description: "Thanks for reaching out. I'll get back to you soon.",
+        });
+
+        (e.target as HTMLFormElement).reset();
+        setPending(false);
+        return;
+      } catch {
+        if (attempt === maxRetries) {
+          toast.error("Failed to send message.", {
+            description:
+              "Please try again later.",
+          });
+        } else {
+          await new Promise((r) => setTimeout(r, attempt * 2_000));
+        }
+      }
+    }
+
     setPending(false);
-
-    toast.success("Message sent!", {
-      description: "Thanks for reaching out. I'll get back to you soon.",
-    });
-
-    (e.target as HTMLFormElement).reset();
   };
 
   return (
