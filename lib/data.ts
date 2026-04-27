@@ -8,7 +8,8 @@ export const siteConfig = {
     "When I'm not coding, you'll probably find me on a volleyball court or a cricket field. I've competed at state and district levels, and I enjoy the competitive spirit and teamwork that comes with it. I also spend time solving coding problems and participating in contests - it's my version of a workout for the brain.",
   ],
   email: "6113devashish@gmail.com",
-  resumePath: "/resume.pdf",
+  backendResumeUrl: "http://localhost:8081/resume.pdf",
+  srcResumePath: "/resume.pdf",
   profileImage: "/profile.jpg",
   socialLinks: [
     {

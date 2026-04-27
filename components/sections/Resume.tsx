@@ -1,17 +1,63 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { siteConfig } from "@/lib/data";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Download } from "lucide-react";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" as const } },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: "easeOut" as const },
+  },
 };
 
 export function Resume() {
+  const fallbackUrl = "/resume.pdf";
+  const backendUrl = "https://pfolio-backend.onrender.com/resume.pdf";
+
+  const [resumeUrl, setResumeUrl] = useState(fallbackUrl);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkBackend = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2500);
+
+        const res = await fetch(backendUrl, {
+          method: "GET", // IMPORTANT: use GET not HEAD
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        // Only switch if response is truly valid
+        if (res.ok && isMounted) {
+          setResumeUrl(backendUrl + "?t=" + Date.now());
+        }
+      } catch {
+      }
+    };
+
+    // Always start with fallback
+    setResumeUrl(fallbackUrl);
+
+    // First attempt
+    checkBackend();
+
+    // 🔄 Retry once after backend wakes up (important for cold start)
+    const retry = setTimeout(checkBackend, 5000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(retry);
+    };
+  }, []);
+
   return (
     <section id="resume" className="scroll-mt-16 bg-muted/30 py-20">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -28,8 +74,9 @@ export function Resume() {
               </h2>
               <Separator className="mt-4" />
             </div>
+
             <a
-              href={siteConfig.resumePath}
+              href={resumeUrl}
               download
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/80"
             >
@@ -46,17 +93,19 @@ export function Resume() {
           viewport={{ once: true, margin: "-80px" }}
           variants={fadeUp}
         >
+          {/* iframe ALWAYS safe */}
           <iframe
-            src={siteConfig.resumePath}
+            src={resumeUrl}
             title="Resume"
             className="hidden h-[85vh] w-full sm:block sm:h-[90vh]"
           />
+
           <div className="flex flex-col items-center gap-4 px-6 py-16 text-center sm:hidden">
             <p className="text-muted-foreground">
               PDF preview is not supported on most mobile browsers.
             </p>
             <a
-              href={siteConfig.resumePath}
+              href={resumeUrl}
               download
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/80"
             >
