@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Mail, Send } from "lucide-react";
+import { Mail, Send, Check } from "lucide-react";
 import { LinkedinIcon } from "@/components/icons";
 
 const iconMap = {
@@ -31,12 +31,90 @@ const fadeUp = {
   },
 };
 
+// Generate a unique GUID
+function generateMessageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+}
+
 export function Contact() {
   const [pending, setPending] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPending(true);
+
+    // Generate unique message ID
+    const newMessageId = generateMessageId();
+
+    // Setup SSE listener FIRST before sending the POST request
+    const eventSource = new EventSource(
+      `https://pfolio-backend.onrender.com/message/status/${newMessageId}`
+    );
+
+    eventSource.onopen = () => {
+      // Fire and forget POST request AFTER SSE listener is ready
+      fetch("https://pfolio-backend.onrender.com/message/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Message-ID": newMessageId,
+        },
+        body: JSON.stringify(body),
+      }).catch((error) => {
+        eventSource.close();
+        toast.error("Failed to send message.", {
+          description: "Please check your connection and try again.",
+        });
+      });
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        console.log("SSE message received:", event.data);
+        const data = JSON.parse(event.data);
+        const statusCode = data.status;
+
+        switch (statusCode) {
+          case "sent":
+            toast.success("Message sent!", {
+              description: "Thanks for reaching out. I'll get back to you soon.",
+            });
+            setPending(false);
+            eventSource.close();
+            break;
+
+          case "failed":
+            toast.error("Failed to send message.", {
+              description: data.error || "Please try again later.",
+            });
+            setPending(false);
+            eventSource.close();
+            break;
+
+          case "error":
+            toast.error("An error occurred.", {
+              description: data.error || "Something went wrong.",
+            });
+            setPending(false);
+            eventSource.close();
+            break;
+
+          default:
+            console.warn("Unknown status code:", statusCode);
+        }
+      } catch (error) {
+        console.error("Error parsing SSE message:", error);
+      }
+    };
+
+    eventSource.addEventListener("message", handleMessage);
+    eventSource.onerror = () => {
+      toast.error("Connection lost.", {
+        description: "The server connection was interrupted.",
+      });
+      eventSource.close();
+      setPending(false);
+    };
 
     const formData = new FormData(e.currentTarget);
     const body = {
@@ -45,45 +123,21 @@ export function Contact() {
       message: formData.get("message"),
     };
 
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
+    // Show immediate feedback
+    toast("Message under processing...", {
+      description: "We're processing your request.",
+      icon: <Check className="size-4 text-gray-500" />,
+    });
 
-        const res = await fetch("https://pfolio-backend.onrender.com/message/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+    // Reset form
+    (e.target as HTMLFormElement).reset();
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to send message.");
-        }
+    // Re-enable button after 1 second (fake timeout for UX)
+    setTimeout(() => {
+      setPending(false);
+    }, 1000);
 
-        toast.success("Message sent!", {
-          description: "Thanks for reaching out. I'll get back to you soon.",
-        });
-
-        (e.target as HTMLFormElement).reset();
-        setPending(false);
-        return;
-      } catch {
-        if (attempt === maxRetries) {
-          toast.error("Failed to send message.", {
-            description:
-              "Please try again later.",
-          });
-        } else {
-          await new Promise((r) => setTimeout(r, attempt * 2_000));
-        }
-      }
-    }
-
-    setPending(false);
+    
   };
 
   return (
